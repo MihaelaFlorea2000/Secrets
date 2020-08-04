@@ -1,10 +1,16 @@
 //jshint esversion:6
 
+// Set up the .env file
+require('dotenv').config();
+
 // Require all usual packages
 const express = require("express");
 const bodyParser = require("body-parser");
 const ejs = require("ejs");
 const mongoose = require("mongoose");
+
+// Require module for encryption
+const encrypt = require("mongoose-encryption");
 
 // Create app
 const app = express();
@@ -27,6 +33,12 @@ mongoose.connect("mongodb://localhost:27017/userDB", {
 const userSchema = new mongoose.Schema({
     email: String,
     password: String
+});
+
+//Encrypt the db with encryption key in .env
+userSchema.plugin(encrypt, {
+    secret: process.env.SECRET,
+    encryptedFields: ["password"]
 });
 
 // User model

@@ -57,9 +57,9 @@ const userSchema = new mongoose.Schema({
     },
     password: String,
     provider: String, // values: 'local', 'google', 'facebook'
-    email: String
+    email: String,
+    secret: String
 });
-
 
 // Set up plug ins
 userSchema.plugin(passportLocalMongoose);
@@ -74,7 +74,6 @@ const User = new mongoose.model("User", userSchema);
 // Create local passport strategy
 passport.use(User.createStrategy());
 
-
 // Serialize user (make cookie and put message inside)
 passport.serializeUser(function (user, done) {
     done(null, user.id);
@@ -87,7 +86,7 @@ passport.deserializeUser(function (id, done) {
     });
 });
 
-// Configure the Google and Facebook strategies
+// Configure the Google strategy
 passport.use(new GoogleStrategy({
         clientID: process.env.GOOGLE_CLIENT_ID,
         clientSecret: process.env.GOOGLE_CLIENT_SECRET,
@@ -108,6 +107,7 @@ passport.use(new GoogleStrategy({
     }
 ));
 
+// Configure the Facebook strategy
 passport.use(new FacebookStrategy({
         clientID: process.env.FACEBOOK_CLIENT_ID,
         clientSecret: process.env.FACEBOOK_CLIENT_SECRET,
@@ -115,7 +115,6 @@ passport.use(new FacebookStrategy({
         profileFields: ["id", "email"] //to bring in the email
     },
     function (accessToken, refreshToken, profile, cb) {
-        console.log(profile);
         User.findOrCreate(
             { username: profile.id }, 
             {
@@ -142,18 +141,27 @@ app.get("/register", function (req, res) {
     res.render("register");
 });
 
+// Render all the secrets in the db
+app.get("/secrets", function (req, res) {
+    User.find({
+        "secret": {
+            $ne: null
+        }
+    }, function (err, foundUsers) {
+        if (err) {
+            console.log(err);
+        } else {
+            res.render("secrets", {
+                usersWithSecrets: foundUsers
+            });
+        }
+    });
+});
 
 // Redirect user to log in with Google
 app.get("/auth/google",
     passport.authenticate("google", {
         scope: ["profile", "email"]
-    })
-);
-
-// Redirect user to log in with Facebook
-app.get("/auth/facebook",
-    passport.authenticate("facebook" , {
-        scope: ["email"]
     })
 );
 
@@ -168,6 +176,13 @@ app.get("/auth/google/secrets",
     }
 );
 
+// Redirect user to log in with Facebook
+app.get("/auth/facebook",
+    passport.authenticate("facebook" , {
+        scope: ["email"]
+    })
+);
+
 // Route the user is directed to after Facebook login
 app.get("/auth/facebook/secrets",
     passport.authenticate("facebook", {
@@ -179,19 +194,13 @@ app.get("/auth/facebook/secrets",
     }
 );
 
-// Check if user is authenticated before rendering secrets page
-app.get("/secrets", function(req, res) {
+// Check if user is authenticated before rendering submit page
+app.get("/submit", function (req, res) {
     if (req.isAuthenticated()) {
-        res.render("secrets");
+        res.render("submit");
     } else {
         res.redirect("/register");
     }
-});
-
-// Logout and redirect home
-app.get("/logout", function (req, res) {
-    req.logout();
-    res.redirect("/");
 });
 
 // Register users 
@@ -246,6 +255,31 @@ app.post("/login", function (req, res) {
             });
         }
     });
+});
+
+// Logout and redirect home
+app.get("/logout", function (req, res) {
+    req.logout();
+    res.redirect("/");
+});
+
+// Add the user's submitted secret to the db
+app.post("/submit", function(req, res) {
+    const secret = req.body.secret;
+    
+    User.findById(req.user.id, function(err, foundUser) {
+        if (err) {
+            console.log(err);
+        } else {
+            if (foundUser) {
+                foundUser.secret = secret;
+                foundUser.save();
+
+                res.redirect("/secrets");
+            }
+        }
+    });
+
 });
 
 // Listen on local port 3000
